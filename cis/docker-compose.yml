@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  cis-db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: cis_dev
+    ports:
+      - "5435:5432"   # deliberately different host port from Mphamvu Hub's own Postgres
+    volumes:
+      - cis_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d cis_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  cis-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      cis-db:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      # host is the cis-db SERVICE NAME, not localhost — this is what
+      # container-to-container networking looks like inside the compose
+      # network. This is a different value from .env.example, which is
+      # written for running the API directly on the host against the
+      # port-mapped 5435.
+      DATABASE_URL: postgresql://user:password@cis-db:5432/cis_dev
+      CIS_CONSENT_SECRET: ${CIS_CONSENT_SECRET:?set CIS_CONSENT_SECRET in .env}
+      TRUSTED_CLIENTS: ${TRUSTED_CLIENTS:?set TRUSTED_CLIENTS in .env}
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:?set INTERNAL_GATEWAY_SECRET in .env}
+      SIMULATOR_ORIGIN: ${SIMULATOR_ORIGIN:-http://localhost:5173}
+    ports:
+      - "4000:4000"
+
+  # One-off seeding: `docker compose run --rm cis-seed`
+  # Does not start automatically with `docker compose up`.
+  cis-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      cis-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://user:password@cis-db:5432/cis_dev
+      CIS_CONSENT_SECRET: ${CIS_CONSENT_SECRET:?set CIS_CONSENT_SECRET in .env}
+      TRUSTED_CLIENTS: ${TRUSTED_CLIENTS:?set TRUSTED_CLIENTS in .env}
+      # Not used by the seed script itself, but env.ts requires it to be
+      # present at import time regardless — seed.ts imports the same
+      # data-source config as the API. Cheaper to set it here than to
+      # special-case env.ts for one script.
+      INTERNAL_GATEWAY_SECRET: ${INTERNAL_GATEWAY_SECRET:?set INTERNAL_GATEWAY_SECRET in .env}
+    command: ["node", "dist/seed/seed.js"]
+    profiles: ["tools"]
+
+volumes:
+  cis_pg_data:
