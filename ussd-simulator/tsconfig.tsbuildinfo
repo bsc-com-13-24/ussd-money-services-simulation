@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/UssdPhone.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/institutions/airtel.ts","./src/institutions/bank.ts","./src/institutions/mpamba.ts","./src/lib/api.ts","./src/lib/mkChain.ts","./src/lib/types.ts"],"version":"5.9.3"}
